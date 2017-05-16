@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>注册/登录</title>
+</head>
+
+<body>
+    <div class='reg'>
+        <input type="text" class='reg-usr'>
+        <input type="text" class='reg-psd'>
+        <button type='button' class='reg-btn'>注册</button>
+    </div>
+    <div class='login' style='display: none'>
+        <input type="text" class='login-usr'>
+        <input type="password" class='login-psd'>
+        <button type='button' class='login-btn'>登录</button>
+    </div>
+    <button type='button' class='change'>切换</button>
+    <div>不是简陋，是极简！</div>
+    <script>
+        //封装函数
+        const Ajax = ({
+            method = 'get',
+            url = '/',
+            async = 'true',
+            header = 'application/x-www-form-urlencoded',
+            data,
+            success = (res) => {
+                console.log(res);
+            }
+        }) => {
+            let xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    let res = JSON.parse(xhr.responseText);
+                    success(res);
+                }
+            }
+            xhr.open(method, url, async);
+            if (method === 'post') {
+                xhr.setRequestHeader('Content-type',header);            
+            }
+            if (method === 'get') {
+                xhr.send()
+            }
+            if (method === 'post') {
+                xhr.send(data);
+            }
+        }
+
+        const $ = (selector) => document.querySelectorAll(selector).length === 1 ? document.querySelector(selector) : document.querySelectorAll(selector);
+        
+        
+
+        //-----------------业务逻辑------------------------
+
+        //切换注册登陆
+        const changeBtn = $('.change'),
+              regDiv = $('.reg'),
+              loginDiv = $('.login');
+        let flag = true;
+        changeBtn.addEventListener('click', () => {
+            if (flag) {
+                regDiv.style.display = 'none';
+                loginDiv.style.display = 'block';
+            }
+            else {
+                regDiv.style.display = 'block';
+                loginDiv.style.display = 'none';
+            }
+            flag = !flag;
+        })
+
+        //注册
+        const regUsr = $('.reg-usr'),
+              regPsd = $('.reg-psd'),
+              regBtn = $('.reg-btn');
+
+        regBtn.addEventListener('click', () => {
+            const usrValue = regUsr.value,
+                  psdValue = regPsd.value;
+                  console.log(regUsr);
+                  console.log(regUsr.value);
+            Ajax({
+                method: 'post',
+                url: '/reg',
+                data: `usr=${usrValue}&psd=${psdValue}`,
+                success: (res) => {
+                    if (res.status === 200) {
+                        console.log('ok');
+                        alert('注册成功');
+                        location.reload();
+                    }
+                    else {
+                        alert('注册失败');
+                        location.reload();
+                    }
+                }
+            })
+        })
+
+        //登录
+        const loginUsr = $('.login-usr'),
+              loginPsd = $('.login-psd'),
+              loginBtn = $('.login-btn');
+
+        loginBtn.addEventListener('click', () => {
+            const usrValue = loginUsr.value,
+                  psdValue = loginPsd.value;
+            Ajax({
+                method: 'post',
+                url: '/login',
+                data: `usr=${usrValue}&psd=${psdValue}`,
+                success: (res) => {
+                    if (res.status === 200) {
+                        console.log('login ok');
+                        alert('登录成功');
+                        location.href = '/';
+                    }
+                    else {
+                        alert('登录失败');
+                        location.href = '/';
+                    }
+                }
+            })
+        })
+
+        
+    </script>
+</body>
+
+</html>
