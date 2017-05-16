@@ -3,8 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <title>评论区</title>
+    <script src='./static/script/mine.js'></script>
+    <style>
+        .yourName {
+            width: 200px;
+            height: 200px;
+            text-align: center;
+            line-height: 200px;
+        }
+    </style>
 </head>
 <body>
-    hello world!
+    <div class='yourName'></div>
+    <div class='comment'>
+        <input type="text" type='text' class='commentField'>
+        <button type='button' class='commentBtn'>评论</button>    
+    </div>
+<script>
+    const commentField = $('.commentField'),
+          commentBtn = $('.commentBtn');
+    commentBtn.addEventListener('click', () => {
+        let comment = commentField.value;
+        Ajax({
+            method: 'post',
+            url: '/write',
+            data: `comment=${comment}`,
+            success: function(res) {
+                
+            }
+        })
+        console.log(comment);
+    })
+</script>
 </body>
 </html>

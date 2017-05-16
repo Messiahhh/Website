@@ -4,6 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>注册/登录</title>
+    <script src='./static/script/mine.js'></script>
 </head>
 
 <body>
@@ -20,39 +21,6 @@
     <button type='button' class='change'>切换</button>
     <div>不是简陋，是极简！</div>
     <script>
-        //封装函数
-        const Ajax = ({
-            method = 'get',
-            url = '/',
-            async = 'true',
-            header = 'application/x-www-form-urlencoded',
-            data,
-            success = (res) => {
-                console.log(res);
-            }
-        }) => {
-            let xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = () => {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    let res = JSON.parse(xhr.responseText);
-                    success(res);
-                }
-            }
-            xhr.open(method, url, async);
-            if (method === 'post') {
-                xhr.setRequestHeader('Content-type',header);            
-            }
-            if (method === 'get') {
-                xhr.send()
-            }
-            if (method === 'post') {
-                xhr.send(data);
-            }
-        }
-
-        const $ = (selector) => document.querySelectorAll(selector).length === 1 ? document.querySelector(selector) : document.querySelectorAll(selector);
-        
-        
 
         //-----------------业务逻辑------------------------
 
@@ -88,8 +56,7 @@
                 url: '/reg',
                 data: `usr=${usrValue}&psd=${psdValue}`,
                 success: (res) => {
-                    if (res.status === 200) {
-                        console.log('ok');
+                    if (res.status === 1) {
                         alert('注册成功');
                         location.reload();
                     }
@@ -114,14 +81,13 @@
                 url: '/login',
                 data: `usr=${usrValue}&psd=${psdValue}`,
                 success: (res) => {
-                    if (res.status === 200) {
-                        console.log('login ok');
+                    if (res.status === 1) {
                         alert('登录成功');
                         location.href = '/';
                     }
                     else {
                         alert('登录失败');
-                        location.href = '/';
+                        window.reload();
                     }
                 }
             })

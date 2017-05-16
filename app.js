@@ -40,30 +40,48 @@ const dateLater = (date, time) => {
     return a.toGMTString();
 }
 
-
+//生成Set-cookie
+const serialize = ({
+    name,
+    val,
+    opt: {
+        expires = dateLater(dateNow(), expires),
+    }
+}) => {
+    let pairs = [`${name}=${val}`];
+    if (expires) {
+        pairs.push(`Expires=${expires}`);
+    }
+    return pairs.join(';');
+}
 
 
 http.createServer((req, res) => {
-    //封装一些函数，挂载在req/res上
-    
-    //生成Set-cookie
-    const serialize = ({
-        name,
-        val,
-        opt: {
-            expires = dateLater(dateNow(), expires),
-        }
-    }) => {
-        let pairs = [`${name}=${val}`];
-        if (expires) {
-            pairs.push(`Expires=${expires}`);
-        }
-        return pairs.join(';');
+    //先根据不同请求方法封装对应的函数，挂载于req, res上
+
+    //把请求方法转成小写
+    req.method = req.method.toLowerCase();
+
+    //获取请求实体，挂载于req.body
+    const getBody = (callback) => {
+        let obj = {},
+            segment = [];
+        req.on('data', (chunk) => {
+            segment.push(chunk);
+        })
+        req.on('end', () => {
+            segment = Buffer.concat(segment).toString();
+            req.body = !segment ? obj : parseSeria({
+                str: segment
+            });
+            callback();
+        })
     }
-    
 
+    //获取查询字符串并挂载于req.query
     req.query = qs.parse(url.parse(req.url).query);
-
+    
+    //挂载cookie
     req.cookies = parseSeria({
         str: req.headers.cookie,
         sep: ';'
@@ -96,7 +114,43 @@ http.createServer((req, res) => {
         })
     }
 
-    //生成session
+    //flag默认为1，此时没有id跳转/index
+    //flag为0时，没有id则返回登录页面
+    const checkId = ({
+        flag = 1,
+        callback
+    }) => {
+        let id = req.cookies[key];
+        if (!id) {
+            if (flag) {
+                res.redirect('/index');
+            }
+            else {
+                res.render('loginPage.html');
+            }
+        }
+        else {
+            client.hget(id, 'usr', (err, data) => {
+                if (err) {
+                    console.log(err);
+                }
+                else {
+                    if (data) {
+                        callback();
+                    }
+                    else {
+                        if (flag) {
+                            res.redirect('/index');                        
+                        }
+                        else {
+                            res.render('loginPage.html');
+                        }
+                    }
+                }
+            })
+        }
+    }
+    //session存于内存中，已弃用
     // const generate = () => {
     //     let session = {};
     //     session.id = dateNow();
@@ -122,165 +176,202 @@ http.createServer((req, res) => {
     }
     
     
-    // 业务逻辑
-    //服务端的session暂时不能自动删除，晚点用Redis代替对象储存session
+    //----------------页面路由
+    
 
     // index --- 登录页面
     if (req.url === '/index') {
-        let id = req.cookies[key];
-        if (!id) {
-            res.render('loginPage.html');
-        }
-        else {
-            client.hget(id, 'usr', (err, data) => {
+        checkId({
+            flag: 0,
+            callback: () => {
+                res.redirect('/');
+            }
+        })
+        // let id = req.cookies[key];
+        // if (!id) {
+        //     res.render('loginPage.html');
+        // }
+        // else {
+        //     client.hget(id, 'usr', (err, data) => {
+        //         if (err) {
+        //             console.log(err);
+        //         }
+        //         else {
+        //             if (data) {
+        //                 res.redirect("/");
+        //             }
+        //             else {
+        //                 res.render('loginPage.html');
+        //             }
+        //         }
+        //     })
+        // }
+    }
+    else if (req.url === '/') {
+        checkId({
+            callback: () => {
+                res.render('index.html');                
+            }
+        })
+        // let id = req.cookies[key];
+        //session_id没有值
+        // if (!id) {
+        //     res.redirect('/index');
+        // }
+        // else {
+        //     client.hget(id, 'usr', (err, data) => {
+        //         if (err) {
+        //             console.log(err);
+        //         }
+        //         else {
+        //             if (data) {
+        //                 res.render('index.html');
+        //             }
+        //             else {
+        //                 res.redirect('/index');
+        //             }
+        //         }
+        //     })
+        // }
+    }
+    // else if(req.url === '/comment') {
+        
+    // }
+
+    // else if (req.url === '/write') {
+    //     let id = req.cookies[key];
+    //     if (!id) {
+    //         res.redirect('/index');
+    //     }
+    //     client.hget(id, usr, (err, data) => {
+    //         if (err) {
+    //             console.log(err);
+    //         }
+    //         else {
+    //             if (data) {
+                    
+    //             }
+    //             else {
+    //                 res.redirect('/index');
+    //             }
+    //         }
+    //     })
+    // }
+
+    //----------------------------逻辑路由
+    // login --- 登录路由
+    else if (req.url === '/login') {
+        getBody(() => {
+            let usr = req.body.usr,
+                psd = req.body.psd;
+            conn.query('SELECT * FROM user WHERE username = ? AND password = ?', [usr, psd], (err, data) => {
                 if (err) {
                     console.log(err);
                 }
+                else if (data && data.length !== 0) {
+                    req.session = generate({
+                        usr: usr,
+                    });
+                    res.setHeader('Set-Cookie', serialize({
+                            name: key,
+                            val: req.session.id,
+                            opt: {
+                                expires: dateLater(dateNow(), expires),
+                            }
+                        })
+                    )
+                    res.json({
+                        status: 1,
+                        info: 'success'
+                    })
+                }
                 else {
-                    if (data) {
-                        res.redirect("/");
-                    }
-                    else {
-                        res.render('loginPage.html');
-                    }
+                    res.json({
+                        status: 0,
+                        info: "fail",
+                    })
                 }
             })
-        }
-    }
-    // login --- 登录路由
-    else if (req.url === '/login') {
-        if (req.method === 'POST') {
-            let segment = [];
-            req.on('data', (chunk) => {
-                segment.push(chunk);
-            })
-            req.on('end', () => {
-                segment = Buffer.concat(segment).toString();
-                let postData = parseSeria({
-                    str: segment,
-                });
-                let usr = postData.usr,
-                    psd = postData.psd;
-                conn.query('SELECT * FROM user WHERE username = ? AND password = ?', [usr, psd], (err, data) => {
-                    if (err) {
-                        console.log(err);
-                    }
-                    else if (data && data.length !== 0) {
-                        req.session = generate({
-                            usr: usr,
-                        });
-                        res.writeHead(200, {
-                            'Set-Cookie': serialize({
-                                name: key,
-                                val: req.session.id,
-                                opt: {
-                                    expires: dateLater(dateNow(), expires),
-                                }
-                            }),
-                        })
-                        res.end(JSON.stringify({
-                            status: 200,
-                            info: 'success'
-                        }));
-                    }
-                    else {
-                        res.json({
-                            status: 400,
-                            info: "fail",
-                        })
-                    }
-                })
-            })
-        }
+        })
     }
     //注册
     else if (req.url === '/reg') {
-        if (req.method === 'POST') {
-            let segment = [];
-            req.on('data', (chunk) => {
-                segment.push(chunk);
-            })
-            req.on('end', () => {
-                segment = Buffer.concat(segment).toString();
-                let postData = parseSeria({
-                    str: segment,
-                });
-                let usr = postData.usr,
-                    psd = postData.psd;
-                conn.query('SELECT * FROM user WHERE username = ?', [usr], (err, data) => {
-                    if (err) {
-                        console.log(err);
-                    }
-                    else {
-                        if (data && data.length !== 0) {
-                            res.json({
-                                status: 400,
-                                info: "fail",
-                            });
-                        }
-                        else {
-                            conn.query('INSERT INTO user VALUE(?,?,?)', [null, usr, psd], (err) => {
-                                if (err) {
-                                    console.log(err);
-                                }
-                                else {
-                                    res.json({
-                                        status: 200,
-                                        info: 'success'
-                                    })
-                                }
-                            })
-                        }
-                    }
-                })
-            })
-        }
-    }
-    else if (req.url === '/') {
-        let id = req.cookies[key];
-        //session_id没有值
-        if (!id) {
-            res.redirect('/index');
-        }
-        else {
-
-            client.hget(id, 'usr', (err, data) => {
+        getBody(() => {
+            let usr = req.body.usr,
+                psd = req.body.psd;
+                console.log(usr);
+            conn.query('SELECT * FROM user WHERE username = ?', [usr], (err, data) => {
                 if (err) {
                     console.log(err);
                 }
                 else {
-                    if (data) {
-                        res.render('index.html');
+                    if (data && data.length !== 0) {
+                        res.json({
+                            status: 0,
+                            info: "fail",
+                        });
                     }
                     else {
-                        res.redirect('/index');
+                        conn.query('INSERT INTO user VALUE(?,?,?)', [null, usr, psd], (err) => {
+                            if (err) {
+                                console.log(err);
+                            }
+                            else {
+                                res.json({
+                                    status: 1,
+                                    info: 'success'
+                                })
+                            }
+                        })
                     }
                 }
             })
-            // let session = sessions[id];
-            //sessions中有对应的值
-            // if (session) {
-                //如果过期了
-                // if (sessions[id].cookie.expires < dateNow()) {
-                //     delete sessions[id];
-                //     req.session = generate();
-                // }
-                // //没过期,更新expires
-                // else {
-                //     sessions[id].cookie.expires = dateLater(dateNow(), expires);
-                //     res.render('index.html');
-                // }
-
-                // sessions[id].cookie.expires = dateLater(dateNow(), expires);
-                // res.render('index.html');
-            // }
-            //sessions中没有对应的值          
-            // else {
-                // res.redirect('/index');
-            // }
-        }
-        
+        })
     }
+    // else if (req.url === '/') {
+    //     let id = req.cookies[key];
+    //     //session_id没有值
+    //     if (!id) {
+    //         res.redirect('/index');
+    //     }
+    //     else {
+    //         client.hget(id, 'usr', (err, data) => {
+    //             if (err) {
+    //                 console.log(err);
+    //             }
+    //             else {
+    //                 if (data) {
+    //                     res.render('index.html');
+    //                 }
+    //                 else {
+    //                     res.redirect('/index');
+    //                 }
+    //             }
+    //         })
+    //     }
+    // }
+    // else if(req.url === '/comment') {
+        
+    // }
+    // else if (req.url === '/write') {
+    //     let id = req.cookies[key];
+    //     if (!id) {
+    //         res.redirect('/index');
+    //     }
+    //     client.hget(id, usr, (err, data) => {
+    //         if (err) {
+    //             console.log(err);
+    //         }
+    //         else {
+    //             if (data) {
+                    
+    //             }
+    //             else {
+    //                 res.redirect('/index');
+    //             }
+    //         }
+    //     })
+    // }
     //静态文件
     else {
         let root = path.resolve(process.argv[2] || '.');
