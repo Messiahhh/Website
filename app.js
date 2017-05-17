@@ -2,11 +2,12 @@ const http = require("http"),
       fs = require("fs"),
       url = require('url'),
       path = require('path'),
+      mime = require('mime'),
+      ejs = require('ejs'),
       qs = require('querystring');
 
 const conn = require('./services/connect_mysql');
 const client = require('./services/connect_redis');
-
 //解析序列化字符串=>对象,其实和qs模块差不多
 const parseSeria = ({
             str,
@@ -104,12 +105,26 @@ http.createServer((req, res) => {
 
     
 
-    res.render = (file) => {
-        fs.readFile(file, (err, data) => {
+    // res.render = (file) => {
+    //     fs.readFile(file, (err, data) => {
+    //         res.writeHead(200, {
+    //             'Content-type': 'text/html',
+    //         })
+    //         res.write(data);
+    //         res.end();
+    //     })
+    // }
+
+    res.render = (file, obj) => {
+        fs.readFile(file, 'utf-8', (err, data) => {
+            let html = data;
+            if (mime.lookup(file) !== 'text/html') {
+                html = ejs.render(data, obj);
+            }
             res.writeHead(200, {
                 'Content-type': 'text/html',
             })
-            res.write(data);
+            res.write(html);
             res.end();
         })
     }
@@ -130,13 +145,13 @@ http.createServer((req, res) => {
             }
         }
         else {
-            client.hget(id, 'usr', (err, data) => {
+            client.hgetall(id, (err, data) => {
                 if (err) {
                     console.log(err);
                 }
                 else {
                     if (data) {
-                        callback();
+                        callback(data);
                     }
                     else {
                         if (flag) {
@@ -164,18 +179,23 @@ http.createServer((req, res) => {
     //生成session保存到redis
     const generate = ({
         usr,
+        user_id,
     }) => {
         let key = dateNow();
-        client.hset(key, 'usr', usr);
         client.hset(key, 'id', key);
+        client.hset(key, 'usr', usr);
+        client.hset(key, 'user_id', user_id);
         client.expire(key, 20 * 60);
         return {
             id: key,
             usr: usr,
+            user_id: user_id
         }
     }
     
     
+
+
     //----------------页面路由
     
 
@@ -187,25 +207,6 @@ http.createServer((req, res) => {
                 res.redirect('/');
             }
         })
-        // let id = req.cookies[key];
-        // if (!id) {
-        //     res.render('loginPage.html');
-        // }
-        // else {
-        //     client.hget(id, 'usr', (err, data) => {
-        //         if (err) {
-        //             console.log(err);
-        //         }
-        //         else {
-        //             if (data) {
-        //                 res.redirect("/");
-        //             }
-        //             else {
-        //                 res.render('loginPage.html');
-        //             }
-        //         }
-        //     })
-        // }
     }
     else if (req.url === '/') {
         checkId({
@@ -213,52 +214,61 @@ http.createServer((req, res) => {
                 res.render('index.html');                
             }
         })
-        // let id = req.cookies[key];
-        //session_id没有值
-        // if (!id) {
-        //     res.redirect('/index');
-        // }
-        // else {
-        //     client.hget(id, 'usr', (err, data) => {
-        //         if (err) {
-        //             console.log(err);
-        //         }
-        //         else {
-        //             if (data) {
-        //                 res.render('index.html');
-        //             }
-        //             else {
-        //                 res.redirect('/index');
-        //             }
-        //         }
-        //     })
-        // }
     }
-    // else if(req.url === '/comment') {
-        
-    // }
+    else if(req.url === '/comment') {
+        checkId({
+            callback: (message) => {
+                conn.query('SELECT * FROM comment WHERE display = 1', (err, data) => {
+                    res.render('comment.ejs', {username: message.usr, data: data});
+                })
+            }
+        })    
+    }
 
-    // else if (req.url === '/write') {
-    //     let id = req.cookies[key];
-    //     if (!id) {
-    //         res.redirect('/index');
-    //     }
-    //     client.hget(id, usr, (err, data) => {
-    //         if (err) {
-    //             console.log(err);
-    //         }
-    //         else {
-    //             if (data) {
-                    
-    //             }
-    //             else {
-    //                 res.redirect('/index');
-    //             }
-    //         }
-    //     })
-    // }
+    
+
 
     //----------------------------逻辑路由
+    else if (req.url === '/delete') {
+        checkId({
+            callback: (message) => {
+                getBody(() => {
+                    let floor_id = req.body.floorId;
+                    conn.query('UPDATE comment SET display = 0 WHERE floor_id = ?', [ floor_id], (err) => {
+                        if (err) {
+                            console.log(err);
+                        }
+                        else {
+                            res.json({
+                                status: 1
+                            })
+                        }
+                    })
+                })
+            }
+        })
+    }
+    else if (req.url === '/write') {
+        checkId({
+            callback: (message) => {
+                getBody(() => {
+                    let comment = req.body.comment,
+                        user_id = message.user_id,
+                        user = message.usr;
+                    conn.query('INSERT INTO comment VALUE(?, ?, ?, ?, default)', [null, user_id, user, comment], (err) => {
+                        if (err) {
+                            console.log(err);
+                        }
+                        else {
+                            res.json({
+                                status: 1,
+                            })
+                        }
+                    })
+                })
+            }
+        })
+    }
     // login --- 登录路由
     else if (req.url === '/login') {
         getBody(() => {
@@ -271,6 +281,7 @@ http.createServer((req, res) => {
                 else if (data && data.length !== 0) {
                     req.session = generate({
                         usr: usr,
+                        user_id: data[0]['user_id']
                     });
                     res.setHeader('Set-Cookie', serialize({
                             name: key,
@@ -299,7 +310,6 @@ http.createServer((req, res) => {
         getBody(() => {
             let usr = req.body.usr,
                 psd = req.body.psd;
-                console.log(usr);
             conn.query('SELECT * FROM user WHERE username = ?', [usr], (err, data) => {
                 if (err) {
                     console.log(err);
@@ -328,50 +338,7 @@ http.createServer((req, res) => {
             })
         })
     }
-    // else if (req.url === '/') {
-    //     let id = req.cookies[key];
-    //     //session_id没有值
-    //     if (!id) {
-    //         res.redirect('/index');
-    //     }
-    //     else {
-    //         client.hget(id, 'usr', (err, data) => {
-    //             if (err) {
-    //                 console.log(err);
-    //             }
-    //             else {
-    //                 if (data) {
-    //                     res.render('index.html');
-    //                 }
-    //                 else {
-    //                     res.redirect('/index');
-    //                 }
-    //             }
-    //         })
-    //     }
-    // }
-    // else if(req.url === '/comment') {
-        
-    // }
-    // else if (req.url === '/write') {
-    //     let id = req.cookies[key];
-    //     if (!id) {
-    //         res.redirect('/index');
-    //     }
-    //     client.hget(id, usr, (err, data) => {
-    //         if (err) {
-    //             console.log(err);
-    //         }
-    //         else {
-    //             if (data) {
-                    
-    //             }
-    //             else {
-    //                 res.redirect('/index');
-    //             }
-    //         }
-    //     })
-    // }
+    
     //静态文件
     else {
         let root = path.resolve(process.argv[2] || '.');

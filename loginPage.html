@@ -55,7 +55,7 @@
                 method: 'post',
                 url: '/reg',
                 data: `usr=${usrValue}&psd=${psdValue}`,
-                success: (res) => {
+                callback: (res) => {
                     if (res.status === 1) {
                         alert('注册成功');
                         location.reload();
@@ -80,7 +80,7 @@
                 method: 'post',
                 url: '/login',
                 data: `usr=${usrValue}&psd=${psdValue}`,
-                success: (res) => {
+                callback: (res) => {
                     if (res.status === 1) {
                         alert('登录成功');
                         location.href = '/';
